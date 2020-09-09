@@ -1,5 +1,8 @@
 --New one function solution
 
+--Known bugs:
+--issue with taint on show() causing invalid combat show errors sometimes; unsure of cause
+
 --Create table to contain stuff for the script
 if not CustomBuffs then
     CustomBuffs = {
@@ -50,7 +53,9 @@ if not CustomBuffs.units then
     CustomBuffs.units = {};
 end
 
---Set up values for dispel types
+--Set up values for dispel types; used to quickly
+--determine whether a spell is dispellable by the player class;
+--used to increase the debuff priority of dispellable debuffs
 if not CustomBuffs.dispelValues then
     CustomBuffs.dispelValues = {
         ["magic"] = 0x1,
@@ -60,6 +65,8 @@ if not CustomBuffs.dispelValues then
         ["massDispel"] = 0x10
     };
 end
+
+--TODO: add options for these rather than hard coding
 
 --Set Max Debuffs
 if not CustomBuffs.MAX_DEBUFFS then
@@ -148,7 +155,10 @@ CustomBuffs.INTERRUPTS = {
     [187707] = { duration = 3 }, -- Muzzle (Hunter)
     [212619] = { duration = 6 }, -- Call Felhunter (Warlock)
     [231665] = { duration = 3 }, -- Avengers Shield (Paladin)
-    ["Solar Beam"] = { duration = 5 }
+    ["Solar Beam"] = { duration = 5 },
+
+    --Non player interrupts BETA FEATURE
+    ["Quaking"] = { duration = 5 }
 };
 
 
@@ -169,7 +179,9 @@ local CDStandard = {["sbPrio"] = 4, ["sdPrio"] = nil, ["bdPrio"] = nil, ["tbPrio
             } ,
             [ 11 ] = { --Druid
                 ["Survival Instincts"] =        CDStandard,
-                ["Barkskin"] =                  CDStandard
+                ["Barkskin"] =                  CDStandard,
+                ["Ironfur"] =                   CDStandard,
+                ["Frenzied Regeneration"] =     CDStandard
             } ,
             [ 3 ] = { --Hunter
                 ["Aspect of the Turtle"] =      CDStandard,
@@ -198,7 +210,8 @@ local CDStandard = {["sbPrio"] = 4, ["sdPrio"] = nil, ["bdPrio"] = nil, ["tbPrio
                 ["Shield of Vengeance"] =       CDStandard,
                 ["Guardian of Ancient Kings"] = CDStandard,
                 ["Seraphim"] =                  CDStandard,
-                ["Guardian of the fortress"] =  CDStandard
+                ["Guardian of the fortress"] =  CDStandard,
+                ["Shield of the Righteous"] =   CDStandard
             } ,
             [ 5 ] = { --Priest
                 ["Dispersion"] =                CDStandard,
@@ -220,11 +233,13 @@ local CDStandard = {["sbPrio"] = 4, ["sdPrio"] = nil, ["bdPrio"] = nil, ["tbPrio
             } ,
             [ 9 ] = { --Warlock
                 ["Unending Resolve"] =          CDStandard,
-                ["Dark Pact"] =                 CDStandard
+                ["Dark Pact"] =                 CDStandard,
+                ["Netherward"] =                CDStandard
             } ,
             [ 1 ] = { --Warrior
                 ["Shield Wall"] =               CDStandard,
                 ["Spell Reflection"] =          CDStandard,
+                ["Shield Block"] =              CDStandard,
                 ["Last Stand"] =                CDStandard,
                 ["Die By The Sword"] =          CDStandard,
                 ["Defensive Stance"] =          CDStandard
@@ -237,7 +252,7 @@ local CDStandard = {["sbPrio"] = 4, ["sdPrio"] = nil, ["bdPrio"] = nil, ["tbPrio
         };
 --Externals show important buffs applied by units other than the player in the standard buff location
     --Display Location:     standard buff
-    --Aura Sources:         not displayed unit
+    --Aura Sources:         non player (formerly to prevent duplicates for player casted versions)
     --Aura Type:            buff
     --Standard Priority Level:
 local EStandard = {["sbPrio"] = 4, ["sdPrio"] = nil, ["bdPrio"] = nil, ["tbPrio"] = nil};
@@ -248,7 +263,7 @@ CustomBuffs.EXTERNALS = {
     ["Vampiric Aura"] =             EStandard,
     ["Blessing of Protection"] =    EStandard,
     ["Blessing of Sacrifice"] =     EStandard,
-    ["Blessing of Spell Warding"] = EStandard,
+    ["Blessing of Spellwarding"] =  EStandard,
     ["Pain Suppression"] =          EStandard,
     ["Guardian Spirit"] =           EStandard,
     ["Roar of Sacrifice"] =         EStandard,
@@ -289,7 +304,7 @@ CustomBuffs.EXTERNALS = {
 
 --Extra raid buffs show untracked buffs from any source in the standard buff location
     --Display Location:     standard buff
-    --Aura Sources:         any
+    --Aura Sources:         player
     --Aura Type:            buff
     --Standard Priority Level:
 local ERBStandard = {["sbPrio"] = 5, ["sdPrio"] = nil, ["bdPrio"] = nil, ["tbPrio"] = nil};
@@ -318,7 +333,8 @@ CustomBuffs.EXTRA_RAID_BUFFS = {
 local TCDStandard = {["sbPrio"] = 3, ["sdPrio"] = nil, ["bdPrio"] = nil, ["tbPrio"] = 2};
 CustomBuffs.THROUGHPUT_CDS = {
     [ 6 ] = { -- dk
-        ["Pillar of Frost"] =                   TCDStandard
+        ["Pillar of Frost"] =                   TCDStandard,
+        ["Unholy Frenzy"] =                     TCDStandard
     } ,
     [ 11 ] = { --druid
         ["Incarnation: Tree of Life"] =         TCDStandard,
@@ -378,7 +394,9 @@ CustomBuffs.THROUGHPUT_CDS = {
         ["Icefury"] =                           TCDStandard
     } ,
     [ 9 ] = { --lock
-        ["Soul Harvest"] =                      TCDStandard
+        ["Soul Harvest"] =                      TCDStandard,
+        ["Dark Soul: Instability"] =            TCDStandard,
+        ["Dark Soul: Misery"] =                 TCDStandard
     } ,
     [ 1 ] = { --warrior
         ["Battle Cry"] =                        TCDStandard,
@@ -389,7 +407,8 @@ CustomBuffs.THROUGHPUT_CDS = {
     },
     [ 12 ] = { --dh
         ["Metamorphosis"] =                     TCDStandard,
-        ["Nemesis"] =                           TCDStandard
+        ["Nemesis"] =                           TCDStandard,
+        ["Furious Gaze"] =                      {["sbPrio"] = 3, ["sdPrio"] = nil, ["bdPrio"] = nil, ["tbPrio"] = 3}
     }
 };
 
@@ -462,7 +481,7 @@ CustomBuffs.CC = {
     ["Blinding Light"] =        {["dispelType"] = "magic", ["sdPrio"] = 3, ["bdPrio"] = 4},
     ["Ring of Frost"] =         {["dispelType"] = "magic", ["sdPrio"] = 3, ["bdPrio"] = 4},
     ["Dragon's Breath"] =       {["dispelType"] = "magic", ["sdPrio"] = 3, ["bdPrio"] = 4},
-    ["Polymmorphed"] =          {["dispelType"] = "magic", ["sdPrio"] = 3, ["bdPrio"] = 4}, --engineering grenade sheep
+    ["Polymorphed"] =           {["dispelType"] = "magic", ["sdPrio"] = 3, ["bdPrio"] = 4}, --engineering grenade sheep
     ["Shadowfury"] =            {["dispelType"] = "magic", ["sdPrio"] = 3, ["bdPrio"] = 4},
     ["Imprison"] =              {["dispelType"] = "magic", ["sdPrio"] = 3, ["bdPrio"] = 4},
     ["Strangulate"] =           {["dispelType"] = "magic", ["sdPrio"] = 3, ["bdPrio"] = 4},
@@ -494,6 +513,8 @@ CustomBuffs.CC = {
 
 
     ["Blind"] =                 {["dispelType"] = nil, ["sdPrio"] = 3, ["bdPrio"] = 4},
+    ["Asphyxiate"] =            {["dispelType"] = nil, ["sdPrio"] = 3, ["bdPrio"] = 4},
+    ["Bull Rush"] =             {["dispelType"] = nil, ["sdPrio"] = 3, ["bdPrio"] = 4},
     ["Intimidation"] =          {["dispelType"] = nil, ["sdPrio"] = 3, ["bdPrio"] = 4},
     ["Kidney Shot"] =           {["dispelType"] = nil, ["sdPrio"] = 3, ["bdPrio"] = 4},
     ["Maim"] =                  {["dispelType"] = nil, ["sdPrio"] = 3, ["bdPrio"] = 4},
@@ -513,6 +534,7 @@ CustomBuffs.CC = {
     [212183] =                  {["dispelType"] = nil, ["sdPrio"] = 3, ["bdPrio"] = 4}, --Smoke Bomb
 
     --Not CC but track anyway
+    ["Obsidian Claw"] =              {["dispelType"] = "magic", ["sdPrio"] = 3, ["bdPrio"] = 4},
     --["Vendetta"] =              {["dispelType"] = nil, ["sdPrio"] = 3, ["bdPrio"] = 4},
     --["Counterstrike Totem"] =   {["dispelType"] = nil, ["sdPrio"] = 3, ["bdPrio"] = 4} --Debuff when affected by counterstrike totem
 };
@@ -549,6 +571,7 @@ function CustomBuffs:updatePlayerSpec()
         return;
     end
 
+    --All other classes of dispel are class specific, but magic dispels are given by spec
     if (CustomBuffs.playerClass == "PRIEST" or role == "HEALER") then
         CustomBuffs.canDispelMagic = true;
     else
@@ -989,7 +1012,7 @@ end
 -------------------------------
 
 hooksecurefunc("CompactUnitFrame_UpdateAuras", function(frame)
-    if (not frame or frame:IsForbidden() or not frame.optionTable or not frame.optionTable.displayNonBossDebuffs) then return; end
+    if (not frame or frame:IsForbidden() or not frame:IsShown() or not frame:GetName():match("^Compact") or not frame.optionTable or not frame.optionTable.displayNonBossDebuffs) then return; end
 
     --Handle pre calculation logic
     if frame.optionTable.displayBuffs then frame.optionTable.displayBuffs = false; end                          --Tell buff frames to skip blizzard logic
@@ -997,7 +1020,7 @@ hooksecurefunc("CompactUnitFrame_UpdateAuras", function(frame)
     if frame.optionTable.displayDispelDebuffs then frame.optionTable.displayDispelDebuffs = false; end          --Prevent blizzard frames from showing dispel debuff frames
     if frame.optionTable.displayNameWhenSelected then frame.optionTable.displayNameWhenSelected = false; end    --Don't show names when the frame is selected to prevent bossDebuff overlap
 
-    --if not frame.debuffsLoaded then
+    --if not frame.debuffsLoaded or not frame.bossDebuffs or not frame.throughputFrames then
         --FIXME: currently updating on every call because something in Blizzard code is
         --overriding our settings sometimes; figure out workaround so we don't have to update every call
         setUpExtraDebuffFrames(frame);
@@ -1056,6 +1079,12 @@ hooksecurefunc("CompactUnitFrame_UpdateAuras", function(frame)
         local name, icon, count, debuffType, duration, expirationTime, unitCaster, _, _, spellID, canApplyAura, isBossAura = UnitDebuff(frame.displayedUnit, index);
         if name then
             if isBossAura then
+                --[[ Debug
+                if not debuffType then
+                    print("potential bug for :", name, ":");
+                end
+                -- end debug ]]
+
                 --Add to bossDebuffs
                 tinsert(bossDebuffs, {
                     ["index"] = index,
@@ -1109,6 +1138,10 @@ hooksecurefunc("CompactUnitFrame_UpdateAuras", function(frame)
         local _, _, displayedClass = UnitClass(frame.displayedUnit);
         if name then
             if isBossAura then
+                --Debug
+                --print("Found boss buff :", name, ":");
+                --end debug
+
                 --Add to bossDebuffs
                 tinsert(bossDebuffs, {
                     ["index"] = index,
@@ -1183,10 +1216,15 @@ hooksecurefunc("CompactUnitFrame_UpdateAuras", function(frame)
     --If there are more bossDebuffs than frames, copy extra auras into appropriate fallthrough locations
     for i = 3, #bossDebuffs do
         --Buffs fall through to buffs, debuffs fall through to debuffs
-        if bossDebuffs[i][type] then
+        if bossDebuffs[i].type then
             tinsert(debuffs, bossDebuffs[i]);
         else
-            print("Boss buff ", name, " falling through to buffs.");
+            --[[ debug stuff
+            local name, _, _, _, _, _, _, _, _, _, _, _ = UnitBuff(frame.displayedUnit, bossDebuffs[i].index);
+            local name2, _, _, _, _, _, _, _, _, _, _, _ = UnitDebuff(frame.displayedUnit, bossDebuffs[i].index);
+            print("Boss buff ", name, " or ", name2, " falling through to buffs.");
+            -- end debug stuff ]]
+
             tinsert(buffs, bossDebuffs[i]);
         end
     end
@@ -1288,7 +1326,8 @@ end);
 
 --Clean Up Names
 hooksecurefunc("CompactUnitFrame_UpdateName", function(frame)
-    if (frame and not frame:IsForbidden()) then
+    --if (frame and not frame:IsForbidden()) then
+    if (not frame or frame:IsForbidden() or not frame:IsShown() or not frame:GetName():match("^Compact") or not frame.optionTable or not frame.optionTable.displayNonBossDebuffs) then return; end
         local name = "";
         if (frame.optionTable and frame.optionTable.displayName) then
             if frame.bossDebuffs and frame.bossDebuffs[1] and frame.bossDebuffs[1]:IsShown() then
@@ -1305,7 +1344,7 @@ hooksecurefunc("CompactUnitFrame_UpdateName", function(frame)
             name = strsub(name,1,lastChar)
         end
         frame.name:SetText(name);
-    end
+    --end
 end);
 
 
