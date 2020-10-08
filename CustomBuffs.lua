@@ -62,7 +62,8 @@ if not CustomBuffs.dispelValues then
         ["curse"] = 0x2,
         ["poison"] = 0x4,
         ["disease"] = 0x8,
-        ["massDispel"] = 0x10
+        ["massDispel"] = 0x10,
+        ["purge"] = 0x20    --Tracked for things like MC
     };
 end
 
@@ -175,7 +176,8 @@ local CDStandard = {["sbPrio"] = 4, ["sdPrio"] = nil, ["bdPrio"] = nil, ["tbPrio
                 ["Vampiric Blood"] =            CDStandard,
                 ["Corpse Shield"] =             CDStandard,
                 ["Bone Shield"] =               CDStandard,
-                ["Dancing Rune Weapon"] =       CDStandard
+                ["Dancing Rune Weapon"] =       CDStandard,
+                ["Hemostasis"] =                CDStandard
             } ,
             [ 11 ] = { --Druid
                 ["Survival Instincts"] =        CDStandard,
@@ -224,7 +226,7 @@ local CDStandard = {["sbPrio"] = 4, ["sdPrio"] = nil, ["bdPrio"] = nil, ["tbPrio
                 ["Feint"] =                     CDStandard,
                 ["Readiness"] =                 CDStandard,
                 ["Riposte"] =                   CDStandard,
-                ["Crimson Vial"] =              CDStandard,
+                ["Crimson Vial"] =              CDStandard
             } ,
             [ 7 ] = { --Shaman
                 ["Astral Shift"] =              CDStandard,
@@ -247,7 +249,9 @@ local CDStandard = {["sbPrio"] = 4, ["sdPrio"] = nil, ["bdPrio"] = nil, ["tbPrio
             [ 12 ] = { --Demon Hunter
                 ["Netherwalk"] =                CDStandard,
                 ["Blur"] =                      CDStandard,
-                ["Darkness"] =                  CDStandard
+                ["Darkness"] =                  CDStandard,
+                ["Demon Spikes"] =              CDStandard,
+                ["Soul Fragments"] =            CDStandard
             }
         };
 --Externals show important buffs applied by units other than the player in the standard buff location
@@ -278,7 +282,8 @@ CustomBuffs.EXTERNALS = {
     ["Beacon of Light"] =           EStandard,
     ["Lifebloom"] =                 EStandard,
     ["Spirit Mend"] =               EStandard,
-
+    ["Misdirection"] =              EStandard,
+    ["Tricks of the Trade"] =       EStandard,
     --Show party/raid member's stealth status in buffs
     ["Stealth"] =                   EStandard,
     ["Vanish"] =                    EStandard,
@@ -319,9 +324,11 @@ CustomBuffs.EXTRA_RAID_BUFFS = {
     ["Grove Tending"] =         ERBStandard,
     ["Spring Blossoms"] =       ERBStandard,
     ["Costal Surge"] =          ERBStandard,
-    [290754] =                  ERBStandard,
+    [290754] =                  ERBStandard, --Lifebloom
     ["Egg on Your Face"] =      ERBStandard,
-    ["Luminous Jellyweed"] =    ERBStandard
+    ["Luminous Jellyweed"] =    ERBStandard,
+    ["Glimmer of Light"] =      ERBStandard,
+    ["Ancestral Vigor"] =       ERBStandard
 };
 
 
@@ -450,91 +457,96 @@ CustomBuffs.BOSS_BUFFS = { --Custom Buffs that should be displayed in the Boss D
     --Aura Sources:         any
     --Aura Type:            debuff
     --Standard Priority Level: (priority is increased one level for debuffs that are currently dispellable)
-local CCStandard = {["sbPrio"] = nil, ["sdPrio"] = 3, ["bdPrio"] = 4, ["tbPrio"] = nil};
+local CCStandard =      {["sbPrio"] = nil, ["sdPrio"] = 3, ["bdPrio"] = 4, ["tbPrio"] = nil};
+local MagicStandard =   {["dispelType"] = "magic", ["sdPrio"] = 3, ["bdPrio"] = 4};
+local CurseStandard =   {["dispelType"] = "curse", ["sdPrio"] = 3, ["bdPrio"] = 4};
+local DiseaseStandard = {["dispelType"] = "disease", ["sdPrio"] = 3, ["bdPrio"] = 4};
+local PoisonStandard =  {["dispelType"] = "poison", ["sdPrio"] = 3, ["bdPrio"] = 4};
+local MDStandard =      {["dispelType"] = "massDispel", ["sdPrio"] = 3, ["bdPrio"] = 4};
+local PurgeStandard =   {["dispelType"] = "purge", ["sdPrio"] = 3, ["bdPrio"] = 4};
 CustomBuffs.CC = {
 
     --------------------
     --   Dispelable   --
     --------------------
 
-    ["Polymorph"] =             {["dispelType"] = "magic", ["sdPrio"] = 3, ["bdPrio"] = 4},
-    ["Freezing Trap"] =         {["dispelType"] = "magic", ["sdPrio"] = 3, ["bdPrio"] = 4},
-    ["Fear"] =                  {["dispelType"] = "magic", ["sdPrio"] = 3, ["bdPrio"] = 4},
-    ["Howl of Terror"] =        {["dispelType"] = "magic", ["sdPrio"] = 3, ["bdPrio"] = 4},
-    ["Mortal Coil"] =           {["dispelType"] = "magic", ["sdPrio"] = 3, ["bdPrio"] = 4},
-    ["Psychic Scream"] =        {["dispelType"] = "magic", ["sdPrio"] = 3, ["bdPrio"] = 4},
-    ["Psychic Horror"] =        {["dispelType"] = "magic", ["sdPrio"] = 3, ["bdPrio"] = 4},
-    ["Seduction"] =             {["dispelType"] = "magic", ["sdPrio"] = 3, ["bdPrio"] = 4},
-    ["Hammer of Justice"] =     {["dispelType"] = "magic", ["sdPrio"] = 3, ["bdPrio"] = 4},
-    ["Chaos Nova"] =            {["dispelType"] = "magic", ["sdPrio"] = 3, ["bdPrio"] = 4},
-    ["Static Charge"] =         {["dispelType"] = "magic", ["sdPrio"] = 3, ["bdPrio"] = 4},
-    ["Mind Bomb"] =             {["dispelType"] = "magic", ["sdPrio"] = 3, ["bdPrio"] = 4},
-    ["Silence"] =               {["dispelType"] = "magic", ["sdPrio"] = 3, ["bdPrio"] = 4},
-    [65813] =                   {["dispelType"] = "magic", ["sdPrio"] = 3, ["bdPrio"] = 4}, --UA Silence
-    ["Sin and Punishment"] =    {["dispelType"] = "magic", ["sdPrio"] = 3, ["bdPrio"] = 4}, --VT dispel fear
-    ["Faerie Swarm"] =          {["dispelType"] = "magic", ["sdPrio"] = 3, ["bdPrio"] = 4},
-    [117526] =                  {["dispelType"] = "magic", ["sdPrio"] = 3, ["bdPrio"] = 4}, --Binding Shot CC
+    ["Polymorph"] =             MagicStandard,
+    ["Freezing Trap"] =         MagicStandard,
+    ["Fear"] =                  MagicStandard,
+    ["Howl of Terror"] =        MagicStandard,
+    ["Mortal Coil"] =           MagicStandard,
+    ["Psychic Scream"] =        MagicStandard,
+    ["Psychic Horror"] =        MagicStandard,
+    ["Seduction"] =             MagicStandard,
+    ["Hammer of Justice"] =     MagicStandard,
+    ["Chaos Nova"] =            MagicStandard,
+    ["Static Charge"] =         MagicStandard,
+    ["Mind Bomb"] =             MagicStandard,
+    ["Silence"] =               MagicStandard,
+    [65813] =                   MagicStandard, --UA Silence
+    ["Sin and Punishment"] =    MagicStandard, --VT dispel fear
+    ["Faerie Swarm"] =          MagicStandard,
+    [117526] =                  MagicStandard, --Binding Shot CC
     --["Arcane Torrent"] = {["dispelType"] = "magic"},
     --["Earthfury"] = {["dispelType"] = "magic"},
-    ["Repentance"] =            {["dispelType"] = "magic", ["sdPrio"] = 3, ["bdPrio"] = 4},
-    ["Lightning Lasso"] =       {["dispelType"] = "magic", ["sdPrio"] = 3, ["bdPrio"] = 4},
-    ["Blinding Light"] =        {["dispelType"] = "magic", ["sdPrio"] = 3, ["bdPrio"] = 4},
-    ["Ring of Frost"] =         {["dispelType"] = "magic", ["sdPrio"] = 3, ["bdPrio"] = 4},
-    ["Dragon's Breath"] =       {["dispelType"] = "magic", ["sdPrio"] = 3, ["bdPrio"] = 4},
-    ["Polymorphed"] =           {["dispelType"] = "magic", ["sdPrio"] = 3, ["bdPrio"] = 4}, --engineering grenade sheep
-    ["Shadowfury"] =            {["dispelType"] = "magic", ["sdPrio"] = 3, ["bdPrio"] = 4},
-    ["Imprison"] =              {["dispelType"] = "magic", ["sdPrio"] = 3, ["bdPrio"] = 4},
-    ["Strangulate"] =           {["dispelType"] = "magic", ["sdPrio"] = 3, ["bdPrio"] = 4},
+    ["Repentance"] =            MagicStandard,
+    ["Lightning Lasso"] =       MagicStandard,
+    ["Blinding Light"] =        MagicStandard,
+    ["Ring of Frost"] =         MagicStandard,
+    ["Dragon's Breath"] =       MagicStandard,
+    ["Polymorphed"] =           MagicStandard, --engineering grenade sheep
+    ["Shadowfury"] =            MagicStandard,
+    ["Imprison"] =              MagicStandard,
+    ["Strangulate"] =           MagicStandard,
 
     --Roots
-    ["Frost Nova"] =            {["dispelType"] = "magic", ["sdPrio"] = 3, ["bdPrio"] = 4},
-    ["Entangling Roots"] =      {["dispelType"] = "magic", ["sdPrio"] = 3, ["bdPrio"] = 4},
-    ["Mass Entanglement"] =     {["dispelType"] = "magic", ["sdPrio"] = 3, ["bdPrio"] = 4},
-    ["Earthgrab"] =             {["dispelType"] = "magic", ["sdPrio"] = 3, ["bdPrio"] = 4},
-    ["Ice Nova"] =              {["dispelType"] = "magic", ["sdPrio"] = 3, ["bdPrio"] = 4},
-    ["Freeze"] =                {["dispelType"] = "magic", ["sdPrio"] = 3, ["bdPrio"] = 4},
-    ["Glacial Spike"] =         {["dispelType"] = "magic", ["sdPrio"] = 3, ["bdPrio"] = 4},
+    ["Frost Nova"] =            MagicStandard,
+    ["Entangling Roots"] =      MagicStandard,
+    ["Mass Entanglement"] =     MagicStandard,
+    ["Earthgrab"] =             MagicStandard,
+    ["Ice Nova"] =              MagicStandard,
+    ["Freeze"] =                MagicStandard,
+    ["Glacial Spike"] =         MagicStandard,
 
     --poison/curse/disease/MD dispellable
-    ["Hex"] =                   {["dispelType"] = "curse", ["sdPrio"] = 3, ["bdPrio"] = 4},
-    ["Mind Control"] =          {["dispelType"] = "magic", ["sdPrio"] = 3, ["bdPrio"] = 4},
-    ["Wyvern Sting"] =          {["dispelType"] = "poison", ["sdPrio"] = 3, ["bdPrio"] = 4},
-    ["Spider Sting"] =          {["dispelType"] = "poison", ["sdPrio"] = 3, ["bdPrio"] = 4},
+    ["Hex"] =                   CurseStandard,
+    ["Mind Control"] =          PurgeStandard,
+    ["Wyvern Sting"] =          PoisonStandard,
+    ["Spider Sting"] =          PoisonStandard,
     --[233022] = true, --Spider Sting Silence
-    ["Cyclone"] =               {["dispelType"] = "massDispel", ["sdPrio"] = 3, ["bdPrio"] = 4},
+    ["Cyclone"] =               MDStandard,
 
     --Not CC but track anyway
-    ["Gladiator's Maledict"] =  {["dispelType"] = "magic", ["sdPrio"] = 3, ["bdPrio"] = 4},
-    ["Touch of Karma"] =        {["dispelType"] = "magic", ["sdPrio"] = 3, ["bdPrio"] = 4}, --Touch of karma debuff
+    ["Gladiator's Maledict"] =  MagicStandard,
+    ["Touch of Karma"] =        MagicStandard, --Touch of karma debuff
+    ["Obsidian Claw"] =         MagicStandard,
 
     --------------------
     -- Not Dispelable --
     --------------------
 
 
-    ["Blind"] =                 {["dispelType"] = nil, ["sdPrio"] = 3, ["bdPrio"] = 4},
-    ["Asphyxiate"] =            {["dispelType"] = nil, ["sdPrio"] = 3, ["bdPrio"] = 4},
-    ["Bull Rush"] =             {["dispelType"] = nil, ["sdPrio"] = 3, ["bdPrio"] = 4},
-    ["Intimidation"] =          {["dispelType"] = nil, ["sdPrio"] = 3, ["bdPrio"] = 4},
-    ["Kidney Shot"] =           {["dispelType"] = nil, ["sdPrio"] = 3, ["bdPrio"] = 4},
-    ["Maim"] =                  {["dispelType"] = nil, ["sdPrio"] = 3, ["bdPrio"] = 4},
-    ["Enraged Maim"] =          {["dispelType"] = nil, ["sdPrio"] = 3, ["bdPrio"] = 4},
-    ["Between the Eyes"] =      {["dispelType"] = nil, ["sdPrio"] = 3, ["bdPrio"] = 4},
-    ["Mighty Bash"] =           {["dispelType"] = nil, ["sdPrio"] = 3, ["bdPrio"] = 4},
-    ["Sap"] =                   {["dispelType"] = nil, ["sdPrio"] = 3, ["bdPrio"] = 4},
-    ["Storm Bolt"] =            {["dispelType"] = nil, ["sdPrio"] = 3, ["bdPrio"] = 4},
-    ["Cheap Shot"] =            {["dispelType"] = nil, ["sdPrio"] = 3, ["bdPrio"] = 4},
-    ["Leg Sweep"] =             {["dispelType"] = nil, ["sdPrio"] = 3, ["bdPrio"] = 4},
-    ["Intimidating Shout"] =    {["dispelType"] = nil, ["sdPrio"] = 3, ["bdPrio"] = 4},
-    ["Quaking Palm"] =          {["dispelType"] = nil, ["sdPrio"] = 3, ["bdPrio"] = 4},
-    ["Paralysis"] =             {["dispelType"] = nil, ["sdPrio"] = 3, ["bdPrio"] = 4},
+    ["Blind"] =                 CCStandard,
+    ["Asphyxiate"] =            CCStandard,
+    ["Bull Rush"] =             CCStandard,
+    ["Intimidation"] =          CCStandard,
+    ["Kidney Shot"] =           CCStandard,
+    ["Maim"] =                  CCStandard,
+    ["Enraged Maim"] =          CCStandard,
+    ["Between the Eyes"] =      CCStandard,
+    ["Mighty Bash"] =           CCStandard,
+    ["Sap"] =                   CCStandard,
+    ["Storm Bolt"] =            CCStandard,
+    ["Cheap Shot"] =            CCStandard,
+    ["Leg Sweep"] =             CCStandard,
+    ["Intimidating Shout"] =    CCStandard,
+    ["Quaking Palm"] =          CCStandard,
+    ["Paralysis"] =             CCStandard,
 
     --Area Denials
-    ["Solar Beam"] =            {["dispelType"] = nil, ["sdPrio"] = 3, ["bdPrio"] = 4},
-    [212183] =                  {["dispelType"] = nil, ["sdPrio"] = 3, ["bdPrio"] = 4}, --Smoke Bomb
+    ["Solar Beam"] =            CCStandard,
+    [212183] =                  CCStandard, --Smoke Bomb
 
-    --Not CC but track anyway
-    ["Obsidian Claw"] =              {["dispelType"] = "magic", ["sdPrio"] = 3, ["bdPrio"] = 4},
     --["Vendetta"] =              {["dispelType"] = nil, ["sdPrio"] = 3, ["bdPrio"] = 4},
     --["Counterstrike Totem"] =   {["dispelType"] = nil, ["sdPrio"] = 3, ["bdPrio"] = 4} --Debuff when affected by counterstrike totem
 };
@@ -578,8 +590,15 @@ function CustomBuffs:updatePlayerSpec()
         CustomBuffs.canDispelMagic = false;
     end
 
-    --Calculate player's current dispel type
     CustomBuffs.dispelType = 0;
+
+    if (CustomBuffs.playerClass == "PRIEST" or CustomBuffs.playerClass == "SHAMAN" or CustomBuffs.playerClass == "DEMONHUNTER"
+        or CustomBuffs.playerClass == "MAGE" or CustomBuffs.playerClass == "HUNTER" or CustomBuffs.playerClass == "WARLOCK") then
+        CustomBuffs.dispelType = bit.bor(CustomBuffs.dispelType, CustomBuffs.dispelValues.purge);
+    end
+
+    --Calculate player's current dispel type
+
     if CustomBuffs.canDispelMagic then
         CustomBuffs.dispelType = bit.bor(CustomBuffs.dispelType, CustomBuffs.dispelValues.magic);
     end
@@ -605,7 +624,7 @@ local function handleCLEU()
     local _, event, _,_,_,_,_, destGUID, _,_,_, spellID, spellName = CombatLogGetCurrentEventInfo()
 
     -- SPELL_INTERRUPT doesn't fire for some channeled spells; if the spell isn't a known interrupt we're done
-    if (event ~= "SPELL_INTERRUPT" and event ~= "SPELL_CAST_SUCCESS") or (not CustomBuffs.INTERRUPTS[spellID]) then return end
+    if (event ~= "SPELL_INTERRUPT" and event ~= "SPELL_CAST_SUCCESS") or (not CustomBuffs.INTERRUPTS[spellID] and not CustomBuffs.INTERRUPTS[spellName]) then return end
 
     --Maybe needed if combat log events are returning spellIDs of 0
     --if spellID == 0 then spellID = lookupIDByName[spellName] end
