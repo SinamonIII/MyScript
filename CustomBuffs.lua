@@ -90,6 +90,12 @@ CompactRaidFrameContainer_LayoutFrames = function(self)
         CustomBuffs.layoutNeedsUpdate = true;
     else
         oldUpdateLayout(self);
+        for index, frame in ipairs(_G.CompactRaidFrameContainer.flowFrames) do
+            --index 1 is a string for some reason so we skip it
+            if index ~= 1 and frame and frame:GetName():match("^Compact") then
+                frame.auraNeedResize = true;
+            end
+        end
     end
 end
 
@@ -811,20 +817,23 @@ end
 local function setUpThroughputFrames(frame)
     if not frame then return; end
 
+    local size = calcBuffSize(frame) * 1.2;
+
     if not frame.throughputFrames then
         local bfone = CreateFrame("Button", frame:GetName().."ThroughputBuff1", frame, "CompactBuffTemplate");
-        bfone.baseSize = 22;
-        bfone:SetSize(frame:GetHeight() / 2, frame:GetHeight() / 2);
+        table.remove(frame.buffFrames);
+        bfone.baseSize = size;
+        bfone:SetSize(size, size);
 
         local bftwo = CreateFrame("Button", frame:GetName().."ThroughputBuff2", frame, "CompactBuffTemplate");
-        bftwo.baseSize = 22;
-        bftwo:SetSize(frame:GetHeight() / 2, frame:GetHeight() / 2);
+        table.remove(frame.buffFrames);
+        bftwo.baseSize = size;
+        bftwo:SetSize(size, size);
 
         frame.throughputFrames = {bfone,bftwo};
     end
 
     local buffs = frame.throughputFrames;
-    local size = calcBuffSize(frame) * 1.2;
 
     buffs[1]:SetSize(size, size);
     buffs[2]:SetSize(size, size);
@@ -878,11 +887,13 @@ local function setUpBossDebuffFrames(frame)
 
     if not frame.bossDebuffs then
         local bfone = CreateFrame("Button", frame:GetName().."BossDebuff1", frame, "CompactDebuffTemplate");
+        table.remove(frame.debuffFrames);
         bfone.baseSize = frame.buffFrames[1]:GetWidth() * 1.2;
         bfone.maxHeight= frame.buffFrames[1]:GetWidth() * 1.5;
         bfone:SetSize(frame:GetHeight() / 2, frame:GetHeight() / 2);
 
         local bftwo = CreateFrame("Button", frame:GetName().."BossDebuff2", frame, "CompactDebuffTemplate");
+        table.remove(frame.debuffFrames);
         bftwo.baseSize = frame.buffFrames[1]:GetWidth() * 1.2;
         bftwo.maxHeight = frame.buffFrames[1]:GetWidth() * 1.5;
         bftwo:SetSize(frame:GetHeight() / 2, frame:GetHeight() / 2);
@@ -1031,7 +1042,7 @@ end
 -------------------------------
 
 hooksecurefunc("CompactUnitFrame_UpdateAuras", function(frame)
-    if (not frame or frame:IsForbidden() or not frame:IsShown() or not frame:GetName():match("^Compact") or not frame.optionTable or not frame.optionTable.displayNonBossDebuffs) then return; end
+    if (not frame or not frame.displayedUnit or frame:IsForbidden() or not frame:IsShown() or not frame:GetName():match("^Compact") or not frame.optionTable or not frame.optionTable.displayNonBossDebuffs) then return; end
 
     --Handle pre calculation logic
     if frame.optionTable.displayBuffs then frame.optionTable.displayBuffs = false; end                          --Tell buff frames to skip blizzard logic
@@ -1039,14 +1050,13 @@ hooksecurefunc("CompactUnitFrame_UpdateAuras", function(frame)
     if frame.optionTable.displayDispelDebuffs then frame.optionTable.displayDispelDebuffs = false; end          --Prevent blizzard frames from showing dispel debuff frames
     if frame.optionTable.displayNameWhenSelected then frame.optionTable.displayNameWhenSelected = false; end    --Don't show names when the frame is selected to prevent bossDebuff overlap
 
-    --if not frame.debuffsLoaded or not frame.bossDebuffs or not frame.throughputFrames then
-        --FIXME: currently updating on every call because something in Blizzard code is
-        --overriding our settings sometimes; figure out workaround so we don't have to update every call
+    if frame.auraNeedResize or not frame.debuffsLoaded or not frame.bossDebuffs or not frame.throughputFrames then
         setUpExtraDebuffFrames(frame);
         setUpExtraBuffFrames(frame);
         setUpThroughputFrames(frame);
         setUpBossDebuffFrames(frame);
-    --end
+        frame.auraNeedResize = false;
+    end
 
     --If our custom aura frames have not yet loaded do nothing
     if not frame.debuffsLoaded or not frame.bossDebuffs or not frame.throughputFrames then return; end
