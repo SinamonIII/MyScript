@@ -2,6 +2,7 @@
 
 --Known bugs:
 --issue with taint on show() causing invalid combat show errors sometimes; unsure of cause
+--issue with raid frames sometimes losing click interaction functionality maybe because of this addon
 
 --Create table to contain stuff for the script
 if not CustomBuffs then
@@ -90,9 +91,11 @@ CompactRaidFrameContainer_LayoutFrames = function(self)
         CustomBuffs.layoutNeedsUpdate = true;
     else
         oldUpdateLayout(self);
+        --updating layout makes calls to update aura frame sizes at an unfortunate time, so we set flags on
+        --each of the frames to override blizzard's overriding of their size on the next update
         for index, frame in ipairs(_G.CompactRaidFrameContainer.flowFrames) do
             --index 1 is a string for some reason so we skip it
-            if index ~= 1 and frame and frame:GetName():match("^Compact") then
+            if index ~= 1 and frame and frame.debuffFrames then
                 frame.auraNeedResize = true;
             end
         end
@@ -183,7 +186,9 @@ local CDStandard = {["sbPrio"] = 4, ["sdPrio"] = nil, ["bdPrio"] = nil, ["tbPrio
                 ["Corpse Shield"] =             CDStandard,
                 ["Bone Shield"] =               CDStandard,
                 ["Dancing Rune Weapon"] =       CDStandard,
-                ["Hemostasis"] =                CDStandard
+                ["Hemostasis"] =                CDStandard,
+                ["Rune Tap"] =                  CDStandard,
+                ["Lichborne"] =                 CDStandard
             } ,
             [ 11 ] = { --Druid
                 ["Survival Instincts"] =        CDStandard,
@@ -266,11 +271,11 @@ local CDStandard = {["sbPrio"] = 4, ["sdPrio"] = nil, ["bdPrio"] = nil, ["tbPrio
     --Aura Type:            buff
     --Standard Priority Level:
 local EStandard = {["sbPrio"] = 4, ["sdPrio"] = nil, ["bdPrio"] = nil, ["tbPrio"] = nil};
+local ELow = {["sbPrio"] = 5, ["sdPrio"] = nil, ["bdPrio"] = nil, ["tbPrio"] = nil};
 CustomBuffs.EXTERNALS = {
     --Major Externals
     ["Ironbark"] =                  EStandard,
     ["Life Cocoon"] =               EStandard,
-    ["Vampiric Aura"] =             EStandard,
     ["Blessing of Protection"] =    EStandard,
     ["Blessing of Sacrifice"] =     EStandard,
     ["Blessing of Spellwarding"] =  EStandard,
@@ -290,51 +295,45 @@ CustomBuffs.EXTERNALS = {
     ["Spirit Mend"] =               EStandard,
     ["Misdirection"] =              EStandard,
     ["Tricks of the Trade"] =       EStandard,
+
+    --Minor Externals worth tracking
+    ["Enveloping Mist"] =           ELow,
+
     --Show party/raid member's stealth status in buffs
     ["Stealth"] =                   EStandard,
     ["Vanish"] =                    EStandard,
     ["Prowl"] =                     EStandard,
 
-    --For Druids
-    --["Cultivation"] = true--,
-    --["Spring Blossoms"] = true
+    --Previous expansion effects
+    ["Vampiric Aura"] =             EStandard
 
-
-    --[[ Filler Buffs
-    "Power Word: Shield",
-    "Enveloping Mist",
-    "Lifebloom",
-    "Focused Growth",
-    "Wild Growth",
-    --"Attonement",
-    "Renewing Mist",
-    "Rejuvenation",
-    "Rejuvenation (Germination)"
-    --]]
 };
 
---Extra raid buffs show untracked buffs from any source in the standard buff location
+--Extra raid buffs show untracked buffs from the player on anyone in the standard buff location
     --Display Location:     standard buff
     --Aura Sources:         player
     --Aura Type:            buff
     --Standard Priority Level:
 local ERBStandard = {["sbPrio"] = 5, ["sdPrio"] = nil, ["bdPrio"] = nil, ["tbPrio"] = nil};
 CustomBuffs.EXTRA_RAID_BUFFS = {
+    ["Cultivation"] =           ERBStandard,
+    ["Spring Blossoms"] =       ERBStandard,
+    [290754] =                  ERBStandard, --Lifebloom from early spring honor talent
+    ["Glimmer of Light"] =      ERBStandard,
+    ["Ancestral Vigor"] =       ERBStandard,
+
+    --BFA procs
+    ["Luminous Jellyweed"] =    ERBStandard,
+    ["Costal Surge"] =          ERBStandard,
+    ["Concentrated Mending"] =  ERBStandard,
+    ["Touch of the Voodoo"] =   ERBStandard,
+    ["Egg on Your Face"] =      ERBStandard,
     ["Coastal Surge"] =         ERBStandard,
     ["Quickening"] =            ERBStandard,
     ["Ancient Flame"] =         ERBStandard,
-    ["Blessed Portents"] =      ERBStandard,
-    ["Concentrated Mending"] =  ERBStandard,
-    ["Cultivation"] =           ERBStandard,
-    ["Touch of the Voodoo"] =   ERBStandard,
     ["Grove Tending"] =         ERBStandard,
-    ["Spring Blossoms"] =       ERBStandard,
-    ["Costal Surge"] =          ERBStandard,
-    [290754] =                  ERBStandard, --Lifebloom
-    ["Egg on Your Face"] =      ERBStandard,
-    ["Luminous Jellyweed"] =    ERBStandard,
-    ["Glimmer of Light"] =      ERBStandard,
-    ["Ancestral Vigor"] =       ERBStandard
+    ["Blessed Portents"] =      ERBStandard
+
 };
 
 
@@ -344,6 +343,7 @@ CustomBuffs.EXTRA_RAID_BUFFS = {
     --Aura Type:            buff
     --Standard Priority Level:
 local TCDStandard = {["sbPrio"] = 3, ["sdPrio"] = nil, ["bdPrio"] = nil, ["tbPrio"] = 2};
+local TCDLow      = {["sbPrio"] = 6, ["sdPrio"] = nil, ["bdPrio"] = nil, ["tbPrio"] = 3};
 CustomBuffs.THROUGHPUT_CDS = {
     [ 6 ] = { -- dk
         ["Pillar of Frost"] =                   TCDStandard,
@@ -357,7 +357,8 @@ CustomBuffs.THROUGHPUT_CDS = {
         ["Incarnation: Chosen of Elune"] =      TCDStandard,
         ["Celestial Alignment"] =               TCDStandard,
         ["Essence of G'Hanir"] =                TCDStandard,
-        ["Tiger's Fury"] =                      TCDStandard
+        ["Tiger's Fury"] =                      TCDStandard,
+        ["Heart of the Wild"] =                 TCDStandard,
 
     } ,
     [ 3 ] = { -- hunter
@@ -383,6 +384,11 @@ CustomBuffs.THROUGHPUT_CDS = {
         ["Avenging Crusader"] =                 TCDStandard,
         ["Holy Avenger"] =                      TCDStandard,
         ["Crusade"] =                           TCDStandard
+        --Testing displaying their active aura here; maybe move
+        --["Concentration Aura"] =                TCDLow,
+        --["Retribution Aura"] =                  TCDLow,
+        --["Crusader Aura"] =                     TCDLow,
+        --["Devotion Aura"] =                     TCDLow
     } ,
     [ 5 ] = { --priest
         ["Archangel"] =                         TCDStandard,
@@ -391,7 +397,9 @@ CustomBuffs.THROUGHPUT_CDS = {
         ["Apotheosis"] =                        TCDStandard,
         --["Divinity"] = true,
         ["Voidform"] =                          TCDStandard,
-        ["Surrender to Madness"] =              TCDStandard
+        ["Surrender to Madness"] =              TCDStandard,
+        ["Spirit Shell"] =                      TCDStandard,
+        ["Shadow Covenant"] =                   TCDStandard
     } ,
     [ 4 ] = { --rogue
         ["Shadow Blades"] =                     TCDStandard,
@@ -421,7 +429,7 @@ CustomBuffs.THROUGHPUT_CDS = {
     [ 12 ] = { --dh
         ["Metamorphosis"] =                     TCDStandard,
         ["Nemesis"] =                           TCDStandard,
-        ["Furious Gaze"] =                      {["sbPrio"] = 3, ["sdPrio"] = nil, ["bdPrio"] = nil, ["tbPrio"] = 3}
+        ["Furious Gaze"] =                      TCDLow
     }
 };
 
@@ -466,6 +474,7 @@ CustomBuffs.BOSS_BUFFS = { --Custom Buffs that should be displayed in the Boss D
 local CCStandard =      {["sbPrio"] = nil, ["sdPrio"] = 3, ["bdPrio"] = 4, ["tbPrio"] = nil};
 local MagicStandard =   {["dispelType"] = "magic", ["sdPrio"] = 3, ["bdPrio"] = 4};
 local CurseStandard =   {["dispelType"] = "curse", ["sdPrio"] = 3, ["bdPrio"] = 4};
+local CurseLow =        {["dispelType"] = "curse", ["sdPrio"] = 3, ["bdPrio"] = 5};
 local DiseaseStandard = {["dispelType"] = "disease", ["sdPrio"] = 3, ["bdPrio"] = 4};
 local PoisonStandard =  {["dispelType"] = "poison", ["sdPrio"] = 3, ["bdPrio"] = 4};
 local MDStandard =      {["dispelType"] = "massDispel", ["sdPrio"] = 3, ["bdPrio"] = 4};
@@ -527,6 +536,11 @@ CustomBuffs.CC = {
     ["Touch of Karma"] =        MagicStandard, --Touch of karma debuff
     ["Obsidian Claw"] =         MagicStandard,
 
+    --Warlock Curses
+    ["Curse of Exhaustion"] =   CurseLow,
+    ["Curse of Tongues"] =      CurseLow,
+    ["Curse of Weakness"] =     CurseLow,
+
     --------------------
     -- Not Dispelable --
     --------------------
@@ -551,7 +565,7 @@ CustomBuffs.CC = {
 
     --Area Denials
     ["Solar Beam"] =            CCStandard,
-    [212183] =                  CCStandard, --Smoke Bomb
+    [212183] =                  CCStandard --Smoke Bomb
 
     --["Vendetta"] =              {["dispelType"] = nil, ["sdPrio"] = 3, ["bdPrio"] = 4},
     --["Counterstrike Totem"] =   {["dispelType"] = nil, ["sdPrio"] = 3, ["bdPrio"] = 4} --Debuff when affected by counterstrike totem
@@ -1042,7 +1056,7 @@ end
 -------------------------------
 
 hooksecurefunc("CompactUnitFrame_UpdateAuras", function(frame)
-    if (not frame or not frame.displayedUnit or frame:IsForbidden() or not frame:IsShown() or not frame:GetName():match("^Compact") or not frame.optionTable or not frame.optionTable.displayNonBossDebuffs) then return; end
+    if (not frame or not frame.displayedUnit or frame:IsForbidden() or not frame:IsShown() or not frame.debuffFrames or not frame:GetName():match("^Compact") or not frame.optionTable or not frame.optionTable.displayNonBossDebuffs) then return; end
 
     --Handle pre calculation logic
     if frame.optionTable.displayBuffs then frame.optionTable.displayBuffs = false; end                          --Tell buff frames to skip blizzard logic
@@ -1349,14 +1363,86 @@ hooksecurefunc("CompactUnitFrame_UpdateAuras", function(frame)
 end);
 
 
+--Testing fix for special characters
+local function stripChars(str)
+  local tableAccents = {};
+    tableAccents["À"] = "A";
+    tableAccents["Á"] = "A";
+    tableAccents["Â"] = "A";
+    tableAccents["Ã"] = "A";
+    tableAccents["Ä"] = "A";
+    tableAccents["Å"] = "A";
+    tableAccents["Æ"] = "AE";
+    tableAccents["Ç"] = "C";
+    tableAccents["È"] = "E";
+    tableAccents["É"] = "E";
+    tableAccents["Ê"] = "E";
+    tableAccents["Ë"] = "E";
+    tableAccents["Ì"] = "I";
+    tableAccents["Í"] = "I";
+    tableAccents["Î"] = "I";
+    tableAccents["Ï"] = "I";
+    tableAccents["Ð"] = "D";
+    tableAccents["Ñ"] = "N";
+    tableAccents["Ò"] = "O";
+    tableAccents["Ó"] = "O";
+    tableAccents["Ô"] = "O";
+    tableAccents["Õ"] = "O";
+    tableAccents["Ö"] = "O";
+    tableAccents["Ø"] = "O";
+    tableAccents["Ù"] = "U";
+    tableAccents["Ú"] = "U";
+    tableAccents["Û"] = "U";
+    tableAccents["Ü"] = "U";
+    tableAccents["Ý"] = "Y";
+    tableAccents["Þ"] = "P";
+    tableAccents["ß"] = "s";
+    tableAccents["à"] = "a";
+    tableAccents["á"] = "a";
+    tableAccents["â"] = "a";
+    tableAccents["ã"] = "a";
+    tableAccents["ä"] = "a";
+    tableAccents["å"] = "a";
+    tableAccents["æ"] = "ae";
+    tableAccents["ç"] = "c";
+    tableAccents["è"] = "e";
+    tableAccents["é"] = "e";
+    tableAccents["ê"] = "e";
+    tableAccents["ë"] = "e";
+    tableAccents["ì"] = "i";
+    tableAccents["í"] = "i";
+    tableAccents["î"] = "i";
+    tableAccents["ï"] = "i";
+    tableAccents["ð"] = "eth";
+    tableAccents["ñ"] = "n";
+    tableAccents["ò"] = "o";
+    tableAccents["ó"] = "o";
+    tableAccents["ô"] = "o";
+    tableAccents["õ"] = "o";
+    tableAccents["ö"] = "o";
+    tableAccents["ø"] = "o";
+    tableAccents["ù"] = "u";
+    tableAccents["ú"] = "u";
+    tableAccents["û"] = "u";
+    tableAccents["ü"] = "u";
+    tableAccents["ý"] = "y";
+    tableAccents["þ"] = "p";
+    tableAccents["ÿ"] = "y";
+
+  local normalisedString = '';
+
+  local normalisedString = str: gsub("[%z\1-\127\194-\244][\128-\191]*", tableAccents);
+
+  return normalisedString;
+
+end
 
 
 
-
+----[[
 --Clean Up Names
 hooksecurefunc("CompactUnitFrame_UpdateName", function(frame)
-    --if (frame and not frame:IsForbidden()) then
-    if (not frame or frame:IsForbidden() or not frame:IsShown() or not frame:GetName():match("^Compact") or not frame.optionTable or not frame.optionTable.displayNonBossDebuffs) then return; end
+    if (not frame or frame:IsForbidden() or not frame:IsShown() or not frame.debuffFrames or not frame:GetName():match("^Compact") or not frame.optionTable or not frame.optionTable.displayNonBossDebuffs) then return; end
         local name = "";
         if (frame.optionTable and frame.optionTable.displayName) then
             if frame.bossDebuffs and frame.bossDebuffs[1] and frame.bossDebuffs[1]:IsShown() then
@@ -1365,17 +1451,16 @@ hooksecurefunc("CompactUnitFrame_UpdateName", function(frame)
             end
             name = GetUnitName(frame.unit, false);
             if not name then return; end
+            name = stripChars(name);
 
-            --FIXME: Currently doesn't handle special characters gracefully; consider updating logic
             --Limit the name to 9 characters and hide realm names
             local lastChar, _ = string.find(name, " ");
             if not lastChar or lastChar > 9 then lastChar = 9; end
             name = strsub(name,1,lastChar)
         end
         frame.name:SetText(name);
-    --end
 end);
-
+--]]
 
 
 

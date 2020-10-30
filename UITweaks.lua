@@ -66,7 +66,7 @@ PetFrameHealthBarTextRight:SetPoint("CENTER","PetFrameHealthBar","CENTER",0,0);
 
 --Hide extraactionbutton background
 ExtraActionBarFrame.button.style:SetAlpha(0);
-ZoneAbilityFrame.SpellButton.Style:SetAlpha(0);
+--ZoneAbilityFrame.SpellButton.Style:SetAlpha(0);
 
 --Hide group number on player frame
 PlayerFrameGroupIndicator.Show = function() return; end
