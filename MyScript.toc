@@ -1,6 +1,0 @@
-## Interface: 80300
-## Author: Hypocrit
-## Title: MyScript
-
-CustomBuffs.lua
-UITweaks.lua

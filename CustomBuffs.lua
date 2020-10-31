@@ -1,12 +1,10 @@
---New one function solution
-
 --Known bugs:
 --issue with taint on show() causing invalid combat show errors sometimes; unsure of cause
 --issue with raid frames sometimes losing click interaction functionality maybe because of this addon
 
---Create table to contain stuff for the script
-if not CustomBuffs then
-    CustomBuffs = {
+local addonName, addonTable = ...; --make use of the default addon namespace
+addonTable.CustomBuffs = LibStub("AceAddon-3.0"):NewAddon("CustomBuffs", "AceTimer-3.0", "AceHook-3.0", "AceEvent-3.0", "AceBucket-3.0", "AceConsole-3.0");
+local CustomBuffs = addonTable.CustomBuffs;
     --[[
         CustomBuffsFrame        :   Frame
 
@@ -41,8 +39,7 @@ if not CustomBuffs then
 
         inRaidGroup             :   boolean
     --]]
-    };
-end
+
 
 --Create a frame so that we can listen for and handle events
 if not CustomBuffs.CustomBuffsFrame then
@@ -68,11 +65,9 @@ if not CustomBuffs.dispelValues then
     };
 end
 
---TODO: add options for these rather than hard coding
-
 --Set Max Debuffs
 if not CustomBuffs.MAX_DEBUFFS then
-    CustomBuffs.MAX_DEBUFFS = 15;
+    CustomBuffs.MAX_DEBUFFS = 6;
 end
 
 --Set Buff Scale Factor
@@ -101,6 +96,9 @@ CompactRaidFrameContainer_LayoutFrames = function(self)
         end
     end
 end
+
+local tinsert = tinsert;
+local tsort = table.sort;
 
 ----------------------
 ----    Tables    ----
@@ -1055,7 +1053,8 @@ end
 -- Main Aura Update function --
 -------------------------------
 
-hooksecurefunc("CompactUnitFrame_UpdateAuras", function(frame)
+--hooksecurefunc("CompactUnitFrame_UpdateAuras",
+function CustomBuffs:UpdateAuras(frame)
     if (not frame or not frame.displayedUnit or frame:IsForbidden() or not frame:IsShown() or not frame.debuffFrames or not frame:GetName():match("^Compact") or not frame.optionTable or not frame.optionTable.displayNonBossDebuffs) then return; end
 
     --Handle pre calculation logic
@@ -1079,7 +1078,7 @@ hooksecurefunc("CompactUnitFrame_UpdateAuras", function(frame)
     --of the left side of the unit frame when the player's group is less than 6 people.
     --Frames are disabled when the player's group grows past 5 players because most UI
     --configurations wrap to a new column after 5 players.
-    if GetNumGroupMembers() <= 5 then
+    if self.db.profile.extraDebuffs and GetNumGroupMembers() <= 5 then
         CustomBuffs.MAX_DEBUFFS = 15;
         CustomBuffs.BUFF_SCALE_FACTOR = 10;
 
@@ -1087,7 +1086,7 @@ hooksecurefunc("CompactUnitFrame_UpdateAuras", function(frame)
             CustomBuffs.inRaidGroup = false;
             setUpExtraDebuffFrames(frame);
         end
-    else
+    elseif self.db.profile.extraDebuffs then
         CustomBuffs.MAX_DEBUFFS = 6;
         CustomBuffs.BUFF_SCALE_FACTOR = 10;
 
@@ -1251,7 +1250,7 @@ hooksecurefunc("CompactUnitFrame_UpdateAuras", function(frame)
     --Assign auras to aura frames
 
     --Sort bossDebuffs in priority order
-    table.sort(bossDebuffs, function(a,b)
+    tsort(bossDebuffs, function(a,b)
         if not a or not b then return true; end
         return a.bdPrio < b.bdPrio;
     end);
@@ -1273,7 +1272,7 @@ hooksecurefunc("CompactUnitFrame_UpdateAuras", function(frame)
     end
 
     --Sort throughputBuffs in priority order
-    table.sort(throughputBuffs, function(a,b)
+    tsort(throughputBuffs, function(a,b)
         if not a or not b then return true; end
         return a.tbPrio < b.tbPrio;
     end);
@@ -1284,13 +1283,13 @@ hooksecurefunc("CompactUnitFrame_UpdateAuras", function(frame)
     end
 
     --Sort debuffs in priority order
-    table.sort(debuffs, function(a,b)
+    tsort(debuffs, function(a,b)
         if not a or not b then return true; end
         return a.sdPrio < b.sdPrio;
     end);
 
     --Sort buffs in priority order
-    table.sort(buffs, function(a,b)
+    tsort(buffs, function(a,b)
         if not a or not b then return true; end
         return a.sbPrio < b.sbPrio;
     end);
@@ -1360,7 +1359,7 @@ hooksecurefunc("CompactUnitFrame_UpdateAuras", function(frame)
     --Boss debuff location is variable, so we need to update their location every update
     updateBossDebuffs(frame);
 
-end);
+end --);
 
 
 --Testing fix for special characters
@@ -1441,7 +1440,8 @@ end
 
 ----[[
 --Clean Up Names
-hooksecurefunc("CompactUnitFrame_UpdateName", function(frame)
+--hooksecurefunc("CompactUnitFrame_UpdateName",
+function CustomBuffs:CleanNames(frame)
     if (not frame or frame:IsForbidden() or not frame:IsShown() or not frame.debuffFrames or not frame:GetName():match("^Compact") or not frame.optionTable or not frame.optionTable.displayNonBossDebuffs) then return; end
         local name = "";
         if (frame.optionTable and frame.optionTable.displayName) then
@@ -1459,116 +1459,65 @@ hooksecurefunc("CompactUnitFrame_UpdateName", function(frame)
             name = strsub(name,1,lastChar)
         end
         frame.name:SetText(name);
-end);
+end--);
 --]]
 
+function CustomBuffs:OnInitialize()
+	-- Set up config pane
+	self:Init();
 
-
-
-
-
---Debug Stuff
-if CustomBuffs and not CustomBuffs.DeepCopy then
-    CustomBuffs.DeepCopy = function(obj, seen)
-      -- Handle non-tables and previously-seen tables.
-      if type(obj) ~= 'table' then return obj end
-      if seen and seen[obj] then return seen[obj] end
-
-      -- New table; mark it as seen an copy recursively.
-      local s = seen or {}
-      local res = setmetatable({}, getmetatable(obj))
-      s[obj] = res
-      for k, v in pairs(obj) do res[CustomBuffs.DeepCopy(k, s)] = CustomBuffs.DeepCopy(v, s) end
-      return res
-    end
+	-- Register callbacks for profile switching
+	self.db.RegisterCallback(self, "OnProfileChanged", "UpdateConfig");
+	self.db.RegisterCallback(self, "OnProfileCopied", "UpdateConfig");
+	self.db.RegisterCallback(self, "OnProfileReset", "UpdateConfig");
 end
 
-if CustomBuffs and not CustomBuffs.DebugPrintTable then
-    CustomBuffs.DebugPrintTable = function(node)
-        -- to make output beautiful
-        local function tab(amt)
-            local str = ""
-            for i=1,amt do
-                str = str .. "\t"
-            end
-            return str
-        end
+function CustomBuffs:OnDisable() end
 
-        local cache, stack, output = {},{},{}
-        local depth = 1
-        local output_str = "{\n"
+function CustomBuffs:OnEnable()
+	self:SecureHook("CompactUnitFrame_UpdateAuras", function(frame) self:UpdateAuras(frame); end);
 
-        while true do
-            local size = 0
-            for k,v in pairs(node) do
-                size = size + 1
-            end
 
-            local cur_index = 1
-            for k,v in pairs(node) do
-                if (cache[node] == nil) or (cur_index >= cache[node]) then
 
-                    if (string.find(output_str,"}",output_str:len())) then
-                        output_str = output_str .. ",\n"
-                    elseif not (string.find(output_str,"\n",output_str:len())) then
-                        output_str = output_str .. "\n"
-                    end
+	self:UpdateConfig();
 
-                    -- This is necessary for working with HUGE tables otherwise we run out of memory using concat on huge strings
-                    table.insert(output,output_str)
-                    output_str = ""
 
-                    local key
-                    if (type(k) == "number" or type(k) == "boolean") then
-                        key = "["..tostring(k).."]"
-                    else
-                        key = "['"..tostring(k).."']"
-                    end
+	self:RegisterChatCommand("cb",function()
+		InterfaceOptionsFrame_OpenToCategory("CustomBuffs");
+		InterfaceOptionsFrame_OpenToCategory("CustomBuffs");
+	end);
+end
 
-                    if (type(v) == "number" or type(v) == "boolean") then
-                        output_str = output_str .. tab(depth) .. key .. " = "..tostring(v)
-                    elseif (type(v) == "table") then
-                        output_str = output_str .. tab(depth) .. key .. " = {\n"
-                        table.insert(stack,node)
-                        table.insert(stack,v)
-                        cache[node] = cur_index+1
-                        break
-                    else
-                        output_str = output_str .. tab(depth) .. key .. " = '"..tostring(v).."'"
-                    end
+function CustomBuffs:Init()
+    -- Set up database defaults
+	local defaults = self:Defaults();
 
-                    if (cur_index == size) then
-                        output_str = output_str .. "\n" .. tab(depth-1) .. "}"
-                    else
-                        output_str = output_str .. ","
-                    end
-                else
-                    -- close the table
-                    if (cur_index == size) then
-                        output_str = output_str .. "\n" .. tab(depth-1) .. "}"
-                    end
-                end
+	-- Create database object
+	self.db = LibStub("AceDB-3.0"):New("CustomBuffsData", defaults);
+	-- Profile handling
+	local profiles = LibStub("AceDBOptions-3.0"):GetOptionsTable(self.db);
 
-                cur_index = cur_index + 1
-            end
+    local generalOptions = self:CreateGeneralOptions();
 
-            if (size == 0) then
-                output_str = output_str .. "\n" .. tab(depth-1) .. "}"
-            end
+    self.config = LibStub("AceConfigRegistry-3.0");
+	self.config:RegisterOptionsTable("CustomBuffs", generalOptions);
+    self.config:RegisterOptionsTable("CustomBuffs Profiles", profiles)
 
-            if (#stack > 0) then
-                node = stack[#stack]
-                stack[#stack] = nil
-                depth = cache[node] == nil and depth + 1 or depth - 1
-            else
-                break
-            end
-        end
+    self.dialog = LibStub("AceConfigDialog-3.0");
+	self.dialog:AddToBlizOptions("CustomBuffs", "CustomBuffs");
+    self.dialog:AddToBlizOptions("CustomBuffs Profiles", "Profiles", "CustomBuffs");
+end
 
-        -- This is necessary for working with HUGE tables otherwise we run out of memory using concat on huge strings
-        table.insert(output,output_str)
-        output_str = table.concat(output)
-
-        return output_str
+function CustomBuffs:UpdateConfig()
+    if not InCombatLockdown() then
+		CompactRaidFrameContainer:SetScale(self.db.profile.frameScale);
+	end
+    if self.db.profile.loadTweaks then
+        self:UITweaks();
+    end
+    if self.db.profile.cleanNames then
+        self:SecureHook("CompactUnitFrame_UpdateName", function(frame) self:CleanNames(frame); end);
+    elseif self:IsHooked("CompactUnitFrame_UpdateName", function(frame) self:CleanNames(frame); end) then
+        self:Unhook("CompactUnitFrame_UpdateName", function(frame) self:CleanNames(frame); end);
     end
 end
