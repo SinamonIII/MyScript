@@ -3,6 +3,13 @@
 local _, addonTable = ...
 local CustomBuffs = addonTable.CustomBuffs
 
+--Empty function to replace functions that we want to disable
+local function CBFVoid()
+    return;
+end
+
+local BUTTON_SCALE = 0.7;
+
 function CustomBuffs:UITweaks()
 --Create a permanently hidden frame to set as the parent of blizzard frames
 --we want to hide later
@@ -69,7 +76,7 @@ ExtraActionBarFrame.button.style:SetAlpha(0);
 --ZoneAbilityFrame.SpellButton.Style:SetAlpha(0);
 
 --Hide group number on player frame
-PlayerFrameGroupIndicator.Show = function() return; end
+PlayerFrameGroupIndicator.Show = CBFVoid;
 PlayerFrameGroupIndicator:Hide();
 
 --Move action bars around
@@ -96,7 +103,6 @@ TalentMicroButton:SetParent(MicroButtonAndBagsBar);
 MainMenuMicroButton:SetParent(MicroButtonAndBagsBar);
 
 --Scale the row of menu buttons down
-local BUTTON_SCALE = 0.7;
 MicroButtonAndBagsBar.MicroBagBar:Hide();
 MicroButtonAndBagsBar:ClearAllPoints();
 MicroButtonAndBagsBar:SetPoint("BOTTOMLEFT",StatusTrackingBarManager,"BOTTOMRIGHT",-5,-23);
@@ -110,8 +116,24 @@ StanceBarFrame.ignoreFramePositionManager = true;
 StanceBarFrame:Hide();
 StanceBarFrame:SetParent("MyHiddenFrame");
 
-TargetFramePowerBarAlt.ignoreFramePositionManager = true;
-TargetFramePowerBarAlt:Hide();
-TargetFramePowerBarAlt:SetParent("MyHiddenFrame");
+--TODO do something smarter with this
+--TargetFramePowerBarAlt.ignoreFramePositionManager = true;
+--TargetFramePowerBarAlt:ClearAllPoints();
+--TargetFramePowerBarAlt:SetPoint("LEFT",StatusTrackingBarManager,"RIGHT",-128,52.5);
+--TargetFramePowerBarAlt:SetParent("MyHiddenFrame");
+
+--Make sure Blizzard can't reparent the frames
+AchievementMicroButton.SetParent = CBFVoid;
+CharacterMicroButton.SetParent = CBFVoid;
+CollectionsMicroButton.SetParent = CBFVoid;
+EJMicroButton.SetParent = CBFVoid;
+GuildMicroButton.SetParent = CBFVoid;
+HelpMicroButton.SetParent = CBFVoid;
+LFDMicroButton.SetParent = CBFVoid;
+QuestLogMicroButton.SetParent = CBFVoid;
+SpellbookMicroButton.SetParent = CBFVoid;
+StoreMicroButton.SetParent = CBFVoid;
+TalentMicroButton.SetParent = CBFVoid;
+MainMenuMicroButton.SetParent = CBFVoid;
 
 end

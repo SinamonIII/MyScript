@@ -5,6 +5,7 @@
 local addonName, addonTable = ...; --make use of the default addon namespace
 addonTable.CustomBuffs = LibStub("AceAddon-3.0"):NewAddon("CustomBuffs", "AceTimer-3.0", "AceHook-3.0", "AceEvent-3.0", "AceBucket-3.0", "AceConsole-3.0");
 local CustomBuffs = addonTable.CustomBuffs;
+if Profiler then _G.CustomBuffs = CustomBuffs end
     --[[
         CustomBuffsFrame        :   Frame
 
@@ -70,10 +71,14 @@ if not CustomBuffs.MAX_DEBUFFS then
     CustomBuffs.MAX_DEBUFFS = 6;
 end
 
+if not CustomBuffs.MAX_BUFFS then
+    CustomBuffs.MAX_BUFFS = 6;
+end
+
 --Set Buff Scale Factor
 if not CustomBuffs.BUFF_SCALE_FACTOR then
     CustomBuffs.BUFF_SCALE_FACTOR = 10;
-    CustomBuffs.BIG_BUFF_SCALE_FACTOR = 1.5;
+    --CustomBuffs.BIG_BUFF_SCALE_FACTOR = 1.5;
 end
 
 CustomBuffs.inRaidGroup = false;
@@ -85,7 +90,7 @@ CompactRaidFrameContainer_LayoutFrames = function(self)
     if InCombatLockdown() then
         CustomBuffs.layoutNeedsUpdate = true;
     else
-        oldUpdateLayout(self);
+
         --updating layout makes calls to update aura frame sizes at an unfortunate time, so we set flags on
         --each of the frames to override blizzard's overriding of their size on the next update
         for index, frame in ipairs(_G.CompactRaidFrameContainer.flowFrames) do
@@ -94,11 +99,56 @@ CompactRaidFrameContainer_LayoutFrames = function(self)
                 frame.auraNeedResize = true;
             end
         end
+
+        oldUpdateLayout(self);
     end
 end
 
+--[[
+local needsUpdateVisible = {};
+--local oldUpdateVisible = CompactUnitFrame_UpdateVisible;
+CompactUnitFrame_UpdateVisible = function(frame)
+    if frame:IsForbidden() then
+        needsUpdateVisible[frame] = true;
+        return;
+    end
+	if ( UnitExists(frame.unit) or UnitExists(frame.displayedUnit) ) then
+		if ( not frame.unitExists ) then
+			frame.newUnit = true;
+		end
+		frame.unitExists = true;
+		frame:Show();
+	else
+		CompactUnitFrame_ClearWidgetSet(frame);
+		frame:Hide();
+		frame.unitExists = false;
+	end
+end
+--]]
+
+--Create locals for speed
+
 local tinsert = tinsert;
 local tsort = table.sort;
+local twipe = table.wipe;
+
+local setMaxDebuffs = CompactUnitFrame_SetMaxDebuffs;
+local setMaxBuffs = CompactUnitFrame_SetMaxBuffs;
+local isPrioDebuff = CompactUnitFrame_Util_IsPriorityDebuff;
+local shouldDisplayDebuff = CompactUnitFrame_Util_ShouldDisplayDebuff;
+local shouldDisplayBuff = CompactUnitFrame_UtilShouldDisplayBuff;
+local setCooldownFrame = CooldownFrame_Set;
+local clearCooldownFrame = CooldownFrame_Clear;
+
+local UnitGUID = UnitGUID;
+
+local dbSize = 1;
+local bSize = 1;
+local tbSize = 1.2;
+local bdSize = 1.5;
+
+local NameCache = {};
+
 
 ----------------------
 ----    Tables    ----
@@ -166,7 +216,7 @@ CustomBuffs.INTERRUPTS = {
     ["Solar Beam"] = { duration = 5 },
 
     --Non player interrupts BETA FEATURE
-    ["Quaking"] = { duration = 5 }
+    ["Quake"] = { duration = 5 } --240448
 };
 
 
@@ -245,7 +295,7 @@ local CDStandard = {["sbPrio"] = 4, ["sdPrio"] = nil, ["bdPrio"] = nil, ["tbPrio
             [ 9 ] = { --Warlock
                 ["Unending Resolve"] =          CDStandard,
                 ["Dark Pact"] =                 CDStandard,
-                ["Netherward"] =                CDStandard
+                ["Nether Ward"] =                CDStandard
             } ,
             [ 1 ] = { --Warrior
                 ["Shield Wall"] =               CDStandard,
@@ -293,6 +343,7 @@ CustomBuffs.EXTERNALS = {
     ["Spirit Mend"] =               EStandard,
     ["Misdirection"] =              EStandard,
     ["Tricks of the Trade"] =       EStandard,
+    ["Rallying Cry"] =              EStandard,
 
     --Minor Externals worth tracking
     ["Enveloping Mist"] =           ELow,
@@ -551,7 +602,7 @@ CustomBuffs.CC = {
     ["Kidney Shot"] =           CCStandard,
     ["Maim"] =                  CCStandard,
     ["Enraged Maim"] =          CCStandard,
-    ["Between the Eyes"] =      CCStandard,
+    --["Between the Eyes"] =      CCStandard, no longer cc
     ["Mighty Bash"] =           CCStandard,
     ["Sap"] =                   CCStandard,
     ["Storm Bolt"] =            CCStandard,
@@ -643,7 +694,6 @@ local function handleCLEU()
 
     -- SPELL_INTERRUPT doesn't fire for some channeled spells; if the spell isn't a known interrupt we're done
     if (event ~= "SPELL_INTERRUPT" and event ~= "SPELL_CAST_SUCCESS") or (not CustomBuffs.INTERRUPTS[spellID] and not CustomBuffs.INTERRUPTS[spellName]) then return end
-
     --Maybe needed if combat log events are returning spellIDs of 0
     --if spellID == 0 then spellID = lookupIDByName[spellName] end
 
@@ -734,9 +784,17 @@ CustomBuffs.CustomBuffsFrame:SetScript("OnEvent",function(self, event, ...)
         CustomBuffs:updatePlayerSpec();
 
     --Update the layout when the player leaves combat if needed
-    elseif (event == "PLAYER_REGEN_ENABLED" and CustomBuffs.layoutNeedsUpdate) then
-    oldUpdateLayout(CompactRaidFrameContainer);
-    CustomBuffs.layoutNeedsUpdate = false;
+    elseif event == "PLAYER_REGEN_ENABLED" then
+        if CustomBuffs.layoutNeedsUpdate then
+            oldUpdateLayout(CompactRaidFrameContainer);
+            CustomBuffs.layoutNeedsUpdate = false;
+        end
+        --[[
+        for frame, _ in ipairs(needsUpdateVisible) do
+            CompactUnitFrame_UpdateVisible(frame);
+            needsUpdateVisible[frame] = nil;
+        end
+        --]]
 
     end
 end);
@@ -760,8 +818,8 @@ end
 local function setUpExtraDebuffFrames(frame)
     if not frame then return; end
 
-    CompactUnitFrame_SetMaxDebuffs(frame, CustomBuffs.MAX_DEBUFFS);
-    local s = calcBuffSize(frame);
+    setMaxDebuffs(frame, CustomBuffs.MAX_DEBUFFS);
+    local s = calcBuffSize(frame) * (dbSize or 1);
 
     if not frame.debuffFrames[CustomBuffs.MAX_DEBUFFS] then
         for i = 4, CustomBuffs.MAX_DEBUFFS do
@@ -797,11 +855,11 @@ end
 local function setUpExtraBuffFrames(frame)
         if not frame then return; end
 
-        CompactUnitFrame_SetMaxBuffs(frame, 6);
-        local s = calcBuffSize(frame);
+        setMaxBuffs(frame, CustomBuffs.MAX_BUFFS);
+        local s = calcBuffSize(frame) * (bSize or 1);
 
-        if not frame.buffFrames[6] then
-            for i = 4, 6 do
+        if not frame.buffFrames[CustomBuffs.MAX_BUFFS] then
+            for i = 4, CustomBuffs.MAX_BUFFS do
                 local bf = CreateFrame("Button", frame:GetName().."Buff"..i, frame, "CompactBuffTemplate");
                 bf.baseSize=22;
                 bf:Hide();
@@ -813,11 +871,15 @@ local function setUpExtraBuffFrames(frame)
             frame.buffFrames[i]:SetSize(s, s);
         end
 
-        for i= 4, 6 do
+        for i= 4, CustomBuffs.MAX_BUFFS do
             local bf = frame.buffFrames[i];
 
             bf:ClearAllPoints();
-            if i > 3 then
+            if i > 3 and i < 7 then
+                bf:SetPoint("BOTTOMRIGHT", frame.buffFrames[i-3], "TOPRIGHT", 0, 0);
+            elseif i > 6 and i < 10 then
+                bf:SetPoint("TOPRIGHT", frame.buffFrames[1], "TOPRIGHT", (s * (i - 6) + 5), 0);
+            elseif i > 9 then
                 bf:SetPoint("BOTTOMRIGHT", frame.buffFrames[i-3], "TOPRIGHT", 0, 0);
             else
                 bf:SetPoint("TOPRIGHT", frame.buffFrames[1], "TOPRIGHT", -(s * (i - 3)), 0);
@@ -829,7 +891,7 @@ end
 local function setUpThroughputFrames(frame)
     if not frame then return; end
 
-    local size = calcBuffSize(frame) * 1.2;
+    local size = calcBuffSize(frame) * (tbSize or 1.2);
 
     if not frame.throughputFrames then
         local bfone = CreateFrame("Button", frame:GetName().."ThroughputBuff1", frame, "CompactBuffTemplate");
@@ -874,7 +936,8 @@ end
 
 local function updateBossDebuffs(frame)
     local debuffs = frame.bossDebuffs;
-    local size = frame.buffFrames[1]:GetWidth() * 1.5;
+    --local size = frame.buffFrames[1]:GetWidth() * (bdSize or 1.5);
+    local size = calcBuffSize(frame) * (bdSize or 1.5);
 
     debuffs[1]:SetSize(size, size);
     debuffs[2]:SetSize(size, size);
@@ -1028,9 +1091,9 @@ local function updateAura(auraFrame, index, auraData)
 
     if ( expirationTime and expirationTime ~= 0 ) then
         local startTime = expirationTime - duration;
-        CooldownFrame_Set(auraFrame.cooldown, startTime, duration, true);
+        setCooldownFrame(auraFrame.cooldown, startTime, duration, true);
     else
-        CooldownFrame_Clear(auraFrame.cooldown);
+        clearCooldownFrame(auraFrame.cooldown);
     end
 
     --If the aura is a debuff then we have some more work to do
@@ -1053,7 +1116,9 @@ end
 -- Main Aura Update function --
 -------------------------------
 
---hooksecurefunc("CompactUnitFrame_UpdateAuras",
+--We will sort the auras out into their preffered display locations
+local bossDebuffs, throughputBuffs, buffs, debuffs = {}, {}, {}, {};
+
 function CustomBuffs:UpdateAuras(frame)
     if (not frame or not frame.displayedUnit or frame:IsForbidden() or not frame:IsShown() or not frame.debuffFrames or not frame:GetName():match("^Compact") or not frame.optionTable or not frame.optionTable.displayNonBossDebuffs) then return; end
 
@@ -1078,26 +1143,32 @@ function CustomBuffs:UpdateAuras(frame)
     --of the left side of the unit frame when the player's group is less than 6 people.
     --Frames are disabled when the player's group grows past 5 players because most UI
     --configurations wrap to a new column after 5 players.
-    if self.db.profile.extraDebuffs and GetNumGroupMembers() <= 5 then
-        CustomBuffs.MAX_DEBUFFS = 15;
-        CustomBuffs.BUFF_SCALE_FACTOR = 10;
-
-        if CustomBuffs.inRaidGroup then
-            CustomBuffs.inRaidGroup = false;
-            setUpExtraDebuffFrames(frame);
-        end
-    elseif self.db.profile.extraDebuffs then
-        CustomBuffs.MAX_DEBUFFS = 6;
-        CustomBuffs.BUFF_SCALE_FACTOR = 10;
-
-        if not CustomBuffs.inRaidGroup then
-            CustomBuffs.inRaidGroup = true;
-            setUpExtraDebuffFrames(frame);
+    if (self.db.profile.extraDebuffs or self.db.profile.extraBuffs) then
+        if GetNumGroupMembers() <= 5 then
+            if CustomBuffs.inRaidGroup then
+                if self.db.profile.extraDebuffs then
+                    CustomBuffs.MAX_DEBUFFS = 15;
+                    setUpExtraDebuffFrames(frame);
+                else
+                    CustomBuffs.MAX_BUFFS = 15;
+                    setUpExtraBuffFrames(frame);
+                end
+                CustomBuffs.inRaidGroup = false;
+            end
+        else
+            if not CustomBuffs.inRaidGroup then
+                if self.db.profile.extraDebuffs then
+                    CustomBuffs.MAX_DEBUFFS = 6;
+                    setUpExtraDebuffFrames(frame);
+                else
+                    CustomBuffs.MAX_BUFFS = 6;
+                    setUpExtraBuffFrames(frame);
+                end
+                CustomBuffs.inRaidGroup = true;
+            end
         end
     end
 
-    --We will sort the auras out into their preffered display locations
-    local bossDebuffs, throughputBuffs, buffs, debuffs = {}, {}, {}, {};
 
     --Check for interrupts
     local guid = UnitGUID(frame.displayedUnit);
@@ -1152,7 +1223,7 @@ function CustomBuffs:UpdateAuras(frame)
                     ["auraData"] = {icon, count, expirationTime, duration, debuffType},
                     ["type"] = "debuff"
                 });
-            elseif CompactUnitFrame_Util_IsPriorityDebuff(name, icon, count, debuffType, duration, expirationTime, unitCaster, nil, nil, spellID) then
+            elseif isPrioDebuff(name, icon, count, debuffType, duration, expirationTime, unitCaster, nil, nil, spellID) then
                 --Add to debuffs
                 tinsert(debuffs, {
                     ["index"] = index,
@@ -1160,7 +1231,7 @@ function CustomBuffs:UpdateAuras(frame)
                     ["auraData"] = {icon, count, expirationTime, duration, debuffType},
                     ["type"] = "debuff"
                 });
-            elseif CompactUnitFrame_Util_ShouldDisplayDebuff(name, icon, count, debuffType, duration, expirationTime, unitCaster, nil, nil, spellID, canApplyAura, isBossAura) then
+            elseif shouldDisplayDebuff(name, icon, count, debuffType, duration, expirationTime, unitCaster, nil, nil, spellID, canApplyAura, isBossAura) then
                 --Add to debuffs
                 tinsert(debuffs, {
                     ["index"] = index,
@@ -1233,7 +1304,7 @@ function CustomBuffs:UpdateAuras(frame)
                     ["sbPrio"] = auraData.sbPrio,
                     ["auraData"] = {icon, count, expirationTime, duration}
                 });
-            elseif CompactUnitFrame_UtilShouldDisplayBuff(name, icon, count, debuffType, duration, expirationTime, unitCaster, nil, nil, spellID, canApplyAura, isBossAura) then
+            elseif shouldDisplayBuff(name, icon, count, debuffType, duration, expirationTime, unitCaster, nil, nil, spellID, canApplyAura, isBossAura) then
                 --Add to buffs
                 tinsert(buffs, {
                     ["index"] = index,
@@ -1354,13 +1425,22 @@ function CustomBuffs:UpdateAuras(frame)
         frame.name:Hide();
     else
         frame.name:Show();
+        --When we call show it doesn't update the text of the name, which
+        --means that our CleanNames code doesn't run until the next update,
+        --so we call it manually to override the default blizzard names
+        if self.db.profile.cleanNames then
+            CustomBuffs:CleanNames(frame);
+        end
     end
 
     --Boss debuff location is variable, so we need to update their location every update
     updateBossDebuffs(frame);
 
+    twipe(bossDebuffs);
+    twipe(throughputBuffs);
+    twipe(buffs);
+    twipe(debuffs);
 end --);
-
 
 --Testing fix for special characters
 local function stripChars(str)
@@ -1440,23 +1520,33 @@ end
 
 ----[[
 --Clean Up Names
---hooksecurefunc("CompactUnitFrame_UpdateName",
 function CustomBuffs:CleanNames(frame)
-    if (not frame or frame:IsForbidden() or not frame:IsShown() or not frame.debuffFrames or not frame:GetName():match("^Compact") or not frame.optionTable or not frame.optionTable.displayNonBossDebuffs) then return; end
+    if (not frame or frame:IsForbidden() or not frame:IsShown() or not frame.debuffFrames or not frame:GetName():match("^Compact")) then return; end
         local name = "";
         if (frame.optionTable and frame.optionTable.displayName) then
             if frame.bossDebuffs and frame.bossDebuffs[1] and frame.bossDebuffs[1]:IsShown() then
                 frame.name:Hide();
                 return;
             end
-            name = GetUnitName(frame.unit, false);
-            if not name then return; end
-            name = stripChars(name);
 
-            --Limit the name to 9 characters and hide realm names
-            local lastChar, _ = string.find(name, " ");
-            if not lastChar or lastChar > 9 then lastChar = 9; end
-            name = strsub(name,1,lastChar)
+            name = NameCache[UnitGUID(frame.unit)];
+            if not name or name == "Unknown" then
+                --if we don't already have the name cached then we calculate it and add it to the cache
+                name = GetUnitName(frame.unit, false);
+
+                --if we still can't find a name we give up
+                if not name then frame.name:Hide(); return; end
+
+                --Replace special characters so we only have to deal with standard 8 bit characters
+                name = stripChars(name);
+
+                --Limit the name to specified number of characters and hide realm names
+                local lastChar, _ = string.find(name, " ");
+                if not lastChar or lastChar > (self.db.profile.maxNameLength or 9) then lastChar = (self.db.profile.maxNameLength or 9); end
+                name = strsub(name,1,lastChar);
+
+                NameCache[UnitGUID(frame.unit)] = name;
+            end
         end
         frame.name:SetText(name);
 end--);
@@ -1515,9 +1605,25 @@ function CustomBuffs:UpdateConfig()
     if self.db.profile.loadTweaks then
         self:UITweaks();
     end
-    if self.db.profile.cleanNames then
+    if self.db.profile.cleanNames and not self:IsHooked("CompactUnitFrame_UpdateName", function(frame) self:CleanNames(frame); end) then
         self:SecureHook("CompactUnitFrame_UpdateName", function(frame) self:CleanNames(frame); end);
-    elseif self:IsHooked("CompactUnitFrame_UpdateName", function(frame) self:CleanNames(frame); end) then
+    elseif not self.db.profile.cleanNames and self:IsHooked("CompactUnitFrame_UpdateName", function(frame) self:CleanNames(frame); end) then
         self:Unhook("CompactUnitFrame_UpdateName", function(frame) self:CleanNames(frame); end);
     end
+
+    dbSize = self.db.profile.debuffScale;
+    bSize = self.db.profile.buffScale;
+    tbSize = self.db.profile.throughputBuffScale;
+    bdSize = self.db.profile.bossDebuffScale;
+
+    for index, frame in ipairs(_G.CompactRaidFrameContainer.flowFrames) do
+        --index 1 is a string for some reason so we skip it
+        if index ~= 1 and frame and frame.debuffFrames then
+            frame.auraNeedResize = true;
+        end
+    end
+
+    CustomBuffs.inRaidGroup = true;
+    --Clear cached names in case updated settings change displayed names
+    twipe(NameCache);
 end
